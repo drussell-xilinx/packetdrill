@@ -480,6 +480,27 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	return packet;
 }
 
+static struct tcp_payload *new_tcp_payload(char *hexstring, char **error)
+{
+  int hex_len = strlen(hexstring);
+  if (hex_len & 1 ) {
+    asprintf(error, "TCP payload hex string length is odd");
+    return NULL;
+  }
+
+  int payload_len = hex_len / 2;
+  struct tcp_payload *payload = malloc(sizeof(*payload) + payload_len);
+  payload->length = payload_len;
+  if (parse_hex_string(hexstring, payload->data,
+                       payload->length, &payload->length)) {
+    free(payload);
+    asprintf(error, "TCP payload is not a valid hex string");
+    return NULL;
+  }
+  assert (payload->length == payload_len);
+  return payload;
+}
+
 %}
 
 %locations
@@ -516,6 +537,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 	struct code_spec *code;
 	struct tcp_option *tcp_option;
 	struct tcp_options *tcp_options;
+	struct tcp_payload *tcp_payload;
 	struct expression *expression;
 	struct expression_list *expression_list;
 	struct errno_spec *errno_info;
@@ -580,6 +602,7 @@ static struct packet *append_gre(struct packet *packet, struct expression *expr)
 %type <tcp_sequence_info> seq opt_icmp_echoed
 %type <tcp_options> opt_tcp_options tcp_option_list
 %type <tcp_option> tcp_option sack_block_list sack_block
+%type <tcp_payload> opt_tcp_payload
 %type <string> function_name
 %type <expression_list> expression_list function_arguments
 %type <expression> expression binary_expression array sub_expr_list
@@ -784,7 +807,7 @@ packet_spec
 ;
 
 tcp_packet_spec
-: packet_prefix opt_ip_info opt_port_info flags seq opt_ack opt_window opt_urg_ptr opt_tcp_options {
+: packet_prefix opt_ip_info opt_port_info flags seq opt_ack opt_window opt_urg_ptr opt_tcp_options opt_tcp_payload {
 	char *error = NULL;
 	struct packet *outer = $1, *inner = NULL;
 	enum direction_t direction = outer->direction;
@@ -803,7 +826,7 @@ tcp_packet_spec
 	inner = new_tcp_packet(in_config->wire_protocol,
 			       direction, $2, $3.src_port, $3.dst_port, $4,
 			       $5.start_sequence, $5.payload_bytes,
-			       $6, $7, $8, $9, &error);
+			       $6, $7, $8, $9, $10, &error);
 	free($4);
 	free($9);
 	if (inner == NULL) {
@@ -1362,6 +1385,19 @@ sack_block
 	}
 	$$->data.sack.block[0].left = htonl($1);
 	$$->data.sack.block[0].right = htonl($3);
+}
+;
+
+opt_tcp_payload
+:                     { $$ = NULL; }
+| '[' hex_blob ']'    {
+	char *error = NULL;
+	$$ = new_tcp_payload($2, &error);
+	if ($$ == NULL) {
+		assert(error != NULL);
+		semantic_error(error);
+		free(error);
+	}
 }
 ;
 

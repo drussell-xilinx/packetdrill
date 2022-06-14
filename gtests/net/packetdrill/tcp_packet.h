@@ -30,6 +30,12 @@
 #include "packet.h"
 #include "tcp_options.h"
 
+/* Represents the TCP payload of a packet. */
+struct tcp_payload {
+	int length;
+	u8 data[]; // data follows immediately after this header
+};
+
 /* Create and initialize a new struct packet containing a TCP segment.
  * The 'flags' are a tcpdump-style sequence of TCP header flags.
  * On success, returns a newly-allocated packet. On failure, returns NULL
@@ -47,5 +53,6 @@ extern struct packet *new_tcp_packet(int address_family,
 				     s32 window,
 				     u16 urg_ptr,
 				     const struct tcp_options *tcp_options,
+				     struct tcp_payload *payload,
 				     char **error);
 #endif /* __TCP_PACKET_H__ */

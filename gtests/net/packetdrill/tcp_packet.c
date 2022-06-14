@@ -100,6 +100,7 @@ struct packet *new_tcp_packet(int address_family,
 			       s32 window,
 			       u16 urg_ptr,
 			       const struct tcp_options *tcp_options,
+			       struct tcp_payload *payload,
 			       char **error)
 {
 	struct packet *packet = NULL;  /* the newly-allocated result packet */
@@ -126,6 +127,12 @@ struct packet *new_tcp_packet(int address_family,
 			 "TCP options are not padded correctly "
 			 "to ensure TCP header is a multiple of 4 bytes: "
 			 "%d excess bytes", tcp_option_bytes & 0x3);
+		return NULL;
+	}
+	if (payload != NULL && payload->length != tcp_payload_bytes) {
+		asprintf(error, "Specified TCP payload is length %d but "
+			 "sequence numbers imply length %d",
+			 payload->length, tcp_payload_bytes);
 		return NULL;
 	}
 	assert((tcp_header_bytes & 0x3) == 0);
@@ -214,6 +221,13 @@ struct packet *new_tcp_packet(int address_family,
 		/* Copy TCP options into packet */
 		memcpy(tcp_option_start, tcp_options->data,
 		       tcp_options->length);
+	}
+
+	if( payload != NULL ) {
+		assert(ip_header_bytes + tcp_header_bytes + payload->length
+		       == packet->buffer_bytes);
+		u8 *payload_buffer = packet->buffer + ip_header_bytes + tcp_header_bytes;
+		memcpy(payload_buffer, payload->data, payload->length);
 	}
 
 	packet->ip_bytes = ip_bytes;
