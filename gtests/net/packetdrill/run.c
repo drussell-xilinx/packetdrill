@@ -548,6 +548,7 @@ void run_script(struct config *config, struct script *script)
 	struct state *state = NULL;
 	struct netdev *netdev = NULL;
 	struct event *event = NULL;
+	bool zc_sends = false;
 
 	DEBUGP("run_script: running script\n");
 
@@ -558,6 +559,13 @@ void run_script(struct config *config, struct script *script)
 	assert(!config->is_wire_server);
 
 	script_path = config->script_path;
+
+	for (event = script->event_list; event; event = event->next)
+		if (event->type == SYSCALL_EVENT &&
+		    !strcmp(event->event.syscall->name, "onload_zc_send"))
+			zc_sends = true;
+	if (zc_sends && !config->is_wire_client)
+		die("ERROR: onload_zc_send is only supported in wire mode\n");
 
 	/* How we use the network is of course a little different in
 	 * each of the two cases....
@@ -572,6 +580,8 @@ void run_script(struct config *config, struct script *script)
 	state = state_new(config, script, netdev);
 
 	if (config->is_wire_client) {
+		if (zc_sends)
+			state->zc_buf = alloc_zc_buffer();
 		state->wire_client = wire_client_new();
 		wire_client_init(state->wire_client, config, script);
 	}

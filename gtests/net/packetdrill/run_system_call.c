@@ -54,6 +54,7 @@
 #include "icmp.h"
 #include "icmpv6.h"
 #include "capability.h"
+#include "onload.h"
 
 static int to_live_fd(struct state *state, int script_fd, int *live_fd,
 		      char **error);
@@ -3255,6 +3256,26 @@ static int syscall_splice(struct state *state, struct syscall_spec *syscall,
 	return STATUS_OK;
 }
 
+static int syscall_onload_zc_send(struct state *state, struct syscall_spec *syscall,
+				  struct expression_list *args, char **error)
+{
+	int script_fd, live_fd, send_len, rc, flags;
+
+	if (check_arg_count(args, 3, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 0, &script_fd, error))
+		return STATUS_ERR;
+	if (to_live_fd(state, script_fd, &live_fd, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 1, &send_len, error))
+		return STATUS_ERR;
+	if (s32_arg(args, 2, &flags, error))
+		return STATUS_ERR;
+
+	rc = do_onload_zc_send(state, live_fd, send_len, flags);
+	return end_syscall(state, syscall, CHECK_EXACT, rc, error);
+}
+
 /* A dispatch table with all the system calls that we support... */
 struct system_call_entry {
 	const char *name;
@@ -3294,6 +3315,7 @@ struct system_call_entry system_call_table[] = {
 	{"epoll_wait",   syscall_epoll_wait},
 	{"pipe",         syscall_pipe},
 	{"splice",       syscall_splice},
+	{"onload_zc_send", syscall_onload_zc_send},
 };
 
 /* Evaluate the system call arguments and invoke the system call. */
